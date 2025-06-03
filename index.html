@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>⚠️ Stress Test Page</title>
+  <title>Slow Hang Test</title>
   <style>
     .box {
       width: 10px;
@@ -21,38 +21,44 @@
   </style>
 </head>
 <body>
-  <h2>⚠️ This page is a browser stress test. It may freeze your system.</h2>
+  <h2>Slow Hang Test: May freeze after a few seconds</h2>
   <div id="container"></div>
 
   <script>
     const container = document.getElementById("container");
 
-    // Step 1: Load a large number of elements in chunks
     let totalBoxes = 0;
     const maxBoxes = 2000000;
-    function loadBoxesBatch() {
-      if (totalBoxes >= maxBoxes) return;
-      for (let i = 0; i < 5000; i++) {
+    const boxesPerBatch = 500;
+
+    function addBoxes() {
+      for (let i = 0; i < boxesPerBatch; i++) {
         const box = document.createElement("div");
         box.className = "box";
         container.appendChild(box);
         totalBoxes++;
       }
-      setTimeout(loadBoxesBatch, 10); // avoids blocking main thread all at once
-    }
-    loadBoxesBatch();
 
-    // Step 2: Add a continuous CPU load
-    setInterval(() => {
-      for (let j = 0; j < 1e7; j++) {
-        Math.sqrt(Math.random() * j);
+      if (totalBoxes < maxBoxes) {
+        requestAnimationFrame(addBoxes); // less aggressive than setTimeout
       }
-    }, 10);
+    }
 
-    // Step 3: Force reflows repeatedly
+    addBoxes();
+
+    // CPU Stress: Start after 5s to give browser a chance to render
+    setTimeout(() => {
+      setInterval(() => {
+        for (let j = 0; j < 1e7; j++) {
+          Math.sqrt(Math.random() * j);
+        }
+      }, 20);
+    }, 5000);
+
+    // Reflow Thrashing
     setInterval(() => {
-      container.offsetHeight; // triggers layout calculation
-    }, 1);
+      container.offsetHeight;
+    }, 50);
   </script>
 </body>
 </html>
