@@ -2,19 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>⚠️ UI Stress Test</title>
+  <title>🔥 Full System Stress Test</title>
   <style>
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
       background: #111;
-      color: #fff;
+      color: #0af;
+      font-family: Arial, sans-serif;
       text-align: center;
     }
 
     h2 {
       margin: 20px;
-      color: #0af;
     }
 
     #container {
@@ -29,55 +28,78 @@
       height: 10px;
       margin: 1px;
       background: #0af;
-      animation: pulse 0.5s infinite alternate;
+      animation: pulse 0.4s infinite alternate;
+      filter: blur(0.5px) brightness(1.5);
     }
 
     @keyframes pulse {
       from { transform: scale(1); }
-      to { transform: scale(1.6); background-color: #00f0ff; }
+      to { transform: scale(1.5); background-color: #00ffff; }
     }
   </style>
 </head>
 <body>
-  <h2>🌐 Browser Stress Test Page</h2>
-  <p>Watch it start smooth, then slowly consume all your CPU/GPU...</p>
+  <h2>🔥 Full Stress Test: CPU + GPU + RAM + Disk</h2>
+  <p>Rendering boxes, calculating math, allocating memory, and writing to disk...</p>
   <div id="container"></div>
 
   <script>
     const container = document.getElementById("container");
-    let total = 0;
-    const max = 500000;
-    const step = 5000;
+    let totalBoxes = 0;
+    const maxBoxes = 500000;
+    const boxesPerBatch = 5000;
 
-    // Load visible UI fast
-    function addBoxesFast() {
-      for (let i = 0; i < step; i++) {
+    // GPU Stress: Animated DOM elements
+    function renderBoxes() {
+      for (let i = 0; i < boxesPerBatch; i++) {
         const box = document.createElement("div");
         box.className = "box";
         container.appendChild(box);
-        total++;
+        totalBoxes++;
       }
-      if (total < max) {
-        requestAnimationFrame(addBoxesFast);
+      if (totalBoxes < maxBoxes) {
+        requestAnimationFrame(renderBoxes);
       }
     }
 
-    // Initial fast load
-    requestAnimationFrame(addBoxesFast);
-
-    // Start CPU stress shortly after visible load
-    setTimeout(() => {
+    // CPU Stress: Constant heavy math
+    function cpuStress() {
       setInterval(() => {
-        for (let j = 0; j < 2e6; j++) {
-          Math.sqrt(j * Math.random());
+        for (let i = 0; i < 5e6; i++) {
+          Math.sqrt(Math.random() * i);
         }
       }, 20);
-    }, 2000); // give UI 2s to appear
+    }
 
-    // Reflow loop for layout stress
-    setInterval(() => {
-      container.offsetHeight;
-    }, 10);
+    // RAM Stress: Allocate growing arrays
+    const memoryHog = [];
+    function ramStress() {
+      setInterval(() => {
+        const arr = new Array(50000).fill(Math.random());
+        memoryHog.push(arr);
+        if (memoryHog.length > 200) memoryHog.shift(); // Keep growing slowly
+      }, 50);
+    }
+
+    // Disk Stress: Write large strings to localStorage
+    function diskStress() {
+      let bigData = "x".repeat(50000); // 50KB
+      let i = 0;
+      try {
+        setInterval(() => {
+          localStorage.setItem("stress_" + i, bigData);
+          i++;
+        }, 100);
+      } catch (e) {
+        console.warn("Disk quota likely reached:", e.message);
+      }
+    }
+
+    // Run all stressors
+    renderBoxes();
+    setTimeout(cpuStress, 1000);
+    setTimeout(ramStress, 1500);
+    setTimeout(diskStress, 2000);
   </script>
 </body>
 </html>
