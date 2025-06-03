@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Slow Hang Test</title>
+  <title>⚠️ Fast Hang Test</title>
   <style>
+    * { margin: 0; padding: 0; }
     .box {
       width: 10px;
       height: 10px;
@@ -11,7 +12,7 @@
       background-color: rgb(0, 81, 255);
       box-shadow: 0 0 10px #000;
       filter: blur(1px);
-      animation: pulse 0.5s infinite alternate;
+      animation: pulse 0.3s infinite alternate;
     }
 
     @keyframes pulse {
@@ -21,44 +22,42 @@
   </style>
 </head>
 <body>
-  <h2>Slow Hang Test: May freeze after a few seconds</h2>
+  <h2>⚠️ This page will freeze your browser fast</h2>
   <div id="container"></div>
 
   <script>
     const container = document.getElementById("container");
 
     let totalBoxes = 0;
-    const maxBoxes = 2000000;
-    const boxesPerBatch = 500;
+    const maxBoxes = 1000000;
+    const fastBatch = 20000;
 
-    function addBoxes() {
-      for (let i = 0; i < boxesPerBatch; i++) {
+    function spamBoxes() {
+      for (let i = 0; i < fastBatch; i++) {
         const box = document.createElement("div");
         box.className = "box";
         container.appendChild(box);
         totalBoxes++;
       }
-
       if (totalBoxes < maxBoxes) {
-        requestAnimationFrame(addBoxes); // less aggressive than setTimeout
+        setTimeout(spamBoxes, 5); // Minimal delay = faster hang
       }
     }
 
-    addBoxes();
+    // Start flooding immediately
+    spamBoxes();
 
-    // CPU Stress: Start after 5s to give browser a chance to render
-    setTimeout(() => {
-      setInterval(() => {
-        for (let j = 0; j < 1e7; j++) {
-          Math.sqrt(Math.random() * j);
-        }
-      }, 20);
-    }, 5000);
+    // Start CPU overload immediately
+    setInterval(() => {
+      for (let j = 0; j < 5e6; j++) {
+        Math.pow(Math.random() * j, 0.5);
+      }
+    }, 10);
 
-    // Reflow Thrashing
+    // Layout thrashing without delay
     setInterval(() => {
       container.offsetHeight;
-    }, 50);
+    }, 5);
   </script>
 </body>
 </html>
