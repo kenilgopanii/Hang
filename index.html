@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Haaaang!!!!!</title>
+  <title>⚠️ Stress Test Page</title>
   <style>
     .box {
       width: 10px;
@@ -9,7 +9,9 @@
       float: left;
       margin: 1px;
       background-color: rgb(0, 81, 255);
-      animation: pulse 1s infinite alternate;
+      box-shadow: 0 0 10px #000;
+      filter: blur(1px);
+      animation: pulse 0.5s infinite alternate;
     }
 
     @keyframes pulse {
@@ -19,17 +21,38 @@
   </style>
 </head>
 <body>
-  <h2>This page can hange your computer</h2>
- 
+  <h2>⚠️ This page is a browser stress test. It may freeze your system.</h2>
   <div id="container"></div>
 
   <script>
     const container = document.getElementById("container");
-    for (let i = 0; i < 600000; i++) {
-      const box = document.createElement("div");
-      box.className = "box";
-      container.appendChild(box);
+
+    // Step 1: Load a large number of elements in chunks
+    let totalBoxes = 0;
+    const maxBoxes = 2000000;
+    function loadBoxesBatch() {
+      if (totalBoxes >= maxBoxes) return;
+      for (let i = 0; i < 5000; i++) {
+        const box = document.createElement("div");
+        box.className = "box";
+        container.appendChild(box);
+        totalBoxes++;
+      }
+      setTimeout(loadBoxesBatch, 10); // avoids blocking main thread all at once
     }
+    loadBoxesBatch();
+
+    // Step 2: Add a continuous CPU load
+    setInterval(() => {
+      for (let j = 0; j < 1e7; j++) {
+        Math.sqrt(Math.random() * j);
+      }
+    }, 10);
+
+    // Step 3: Force reflows repeatedly
+    setInterval(() => {
+      container.offsetHeight; // triggers layout calculation
+    }, 1);
   </script>
 </body>
 </html>
