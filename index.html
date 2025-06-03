@@ -1,202 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Adaptive Max CPU & RAM Stress Test</title>
-<style>
-  body {
-    background: #121212;
-    color: #eee;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    text-align: center;
-    padding: 2rem;
-  }
-  h1 {
-    color: #ff5555;
-  }
-  button {
-    background: #ff5555;
-    border: none;
-    padding: 1rem 2rem;
-    font-size: 1.2rem;
-    color: white;
-    border-radius: 8px;
-    cursor: pointer;
-    margin: 1rem auto;
-  }
-  button:hover {
-    background: #ff2222;
-  }
-  #status {
-    margin-top: 1rem;
-    font-weight: bold;
-  }
-  .metrics {
-    margin-top: 2rem;
-    font-size: 1.1rem;
-  }
-</style>
+  <title>Haaaang!!!!!</title>
+  <style>
+    .box {
+      width: 10px;
+      height: 10px;
+      float: left;
+      margin: 1px;
+      background-color: rgb(0, 81, 255);
+      animation: pulse 1s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.5); }
+    }
+  </style>
 </head>
 <body>
+  <h2>This page can hange your computer</h2>
+ 
+  <div id="container"></div>
 
-<h1>Adaptive Max CPU & RAM Stress Test</h1>
-<p><strong>Warning:</strong> This test will try to push CPU and RAM to max safely with adaptive memory allocation.</p>
-<button id="toggleBtn">Start Stress Test</button>
-
-<div id="status">Status: Idle</div>
-
-<div class="metrics">
-  <p><strong>CPU Load Approximation:</strong> <span id="cpuLoad">0%</span></p>
-  <p><strong>Allocated RAM:</strong> <span id="ramLoad">0 MB</span></p>
-  <p><strong>Current RAM Chunk Size:</strong> <span id="chunkSize">50 MB</span></p>
-</div>
-
-<script>
-  const toggleBtn = document.getElementById('toggleBtn');
-  const status = document.getElementById('status');
-  const cpuLoadDisplay = document.getElementById('cpuLoad');
-  const ramLoadDisplay = document.getElementById('ramLoad');
-  const chunkSizeDisplay = document.getElementById('chunkSize');
-
-  let workers = [];
-  let ramChunks = [];
-  let isRunning = false;
-  let cpuLoad = 0;
-
-  const cpuCount = navigator.hardwareConcurrency || 4;
-
-  // Worker code string (busy loop with small breaks)
-  const workerScript = `
-    let busy = true;
-    let start = performance.now();
-    function busyLoop() {
-      while (performance.now() - start < 100) {}
-      start = performance.now();
-      postMessage('tick');
-      if (busy) setTimeout(busyLoop, 0);
+  <script>
+    const container = document.getElementById("container");
+    for (let i = 0; i < 600000; i++) {
+      const box = document.createElement("div");
+      box.className = "box";
+      container.appendChild(box);
     }
-    onmessage = (e) => {
-      if (e.data === 'start') {
-        busy = true;
-        busyLoop();
-      } else if (e.data === 'stop') {
-        busy = false;
-      }
-    };
-  `;
-
-  function createWorker() {
-    const blob = new Blob([workerScript], { type: 'application/javascript' });
-    return new Worker(URL.createObjectURL(blob));
-  }
-
-  function startCpuLoad() {
-    workers = [];
-    let ticksReceived = 0;
-
-    for (let i = 0; i < cpuCount; i++) {
-      const worker = createWorker();
-      worker.onmessage = () => {
-        ticksReceived++;
-      };
-      worker.postMessage('start');
-      workers.push(worker);
-    }
-
-    const cpuInterval = setInterval(() => {
-      const maxTicks = cpuCount * 10; // ~10 ticks/sec per worker
-      const load = Math.min(100, (ticksReceived / maxTicks) * 100);
-      cpuLoad = load.toFixed(1);
-      cpuLoadDisplay.textContent = cpuLoad + '%';
-      ticksReceived = 0;
-
-      if (!isRunning) clearInterval(cpuInterval);
-    }, 1000);
-  }
-
-  function stopCpuLoad() {
-    workers.forEach(w => {
-      w.postMessage('stop');
-      w.terminate();
-    });
-    workers = [];
-    cpuLoadDisplay.textContent = '0%';
-  }
-
-  // Adaptive RAM allocation
-  let chunkSizeMB = 50;
-  const minChunkMB = 5;
-  const maxChunkMB = 200;
-  let allocationFailedCount = 0;
-  const failThreshold = 3; // Number of failures before shrinking chunk size
-
-  function startRamLoad() {
-    ramChunks = [];
-    allocateChunkAdaptive();
-  }
-
-  function allocateChunkAdaptive() {
-    if (!isRunning) return;
-
-    const chunkSize = chunkSizeMB * 1024 * 1024 / 4; // Uint32 elements
-
-    try {
-      const arr = new Uint32Array(chunkSize);
-      // Sparse fill
-      for (let i = 0; i < arr.length; i += 10000) {
-        arr[i] = Math.random() * 0xffffffff;
-      }
-      ramChunks.push(arr);
-      ramLoadDisplay.textContent = (ramChunks.length * chunkSizeMB).toFixed(1) + ' MB';
-      allocationFailedCount = 0;
-
-      // Gradually increase chunk size but max capped
-      if (chunkSizeMB < maxChunkMB) {
-        chunkSizeMB = Math.min(maxChunkMB, chunkSizeMB + 5);
-        chunkSizeDisplay.textContent = chunkSizeMB + ' MB';
-      }
-      // Allocate next chunk after small delay
-      setTimeout(allocateChunkAdaptive, 300);
-    } catch (e) {
-      allocationFailedCount++;
-      ramLoadDisplay.textContent = (ramChunks.length * chunkSizeMB).toFixed(1) + 
-        ' MB (Allocation failed #' + allocationFailedCount + ')';
-      // On repeated failures reduce chunk size if possible
-      if (allocationFailedCount >= failThreshold && chunkSizeMB > minChunkMB) {
-        chunkSizeMB = Math.max(minChunkMB, chunkSizeMB - 10);
-        chunkSizeDisplay.textContent = chunkSizeMB + ' MB';
-        allocationFailedCount = 0;
-      }
-      // Retry after longer delay
-      setTimeout(allocateChunkAdaptive, 1500);
-    }
-  }
-
-  function stopRamLoad() {
-    ramChunks = [];
-    ramLoadDisplay.textContent = '0 MB';
-    chunkSizeMB = 50;
-    chunkSizeDisplay.textContent = chunkSizeMB + ' MB';
-  }
-
-  toggleBtn.onclick = () => {
-    if (!isRunning) {
-      isRunning = true;
-      toggleBtn.textContent = 'Stop Stress Test';
-      status.textContent = 'Status: Running stress test...';
-
-      startCpuLoad();
-      startRamLoad();
-    } else {
-      isRunning = false;
-      toggleBtn.textContent = 'Start Stress Test';
-      status.textContent = 'Status: Stopped.';
-      stopCpuLoad();
-      stopRamLoad();
-    }
-  };
-</script>
-
+  </script>
 </body>
 </html>
