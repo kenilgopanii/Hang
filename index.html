@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Reliable CPU & RAM Stress Test</title>
+<title>Adaptive Max CPU & RAM Stress Test</title>
 <style>
   body {
     background: #121212;
@@ -40,8 +40,8 @@
 </head>
 <body>
 
-<h1>Reliable CPU & RAM Stress Test</h1>
-<p><strong>Warning:</strong> This test stresses your CPU and RAM gradually and tries to keep running without crashing.</p>
+<h1>Adaptive Max CPU & RAM Stress Test</h1>
+<p><strong>Warning:</strong> This test will try to push CPU and RAM to max safely with adaptive memory allocation.</p>
 <button id="toggleBtn">Start Stress Test</button>
 
 <div id="status">Status: Idle</div>
@@ -49,6 +49,7 @@
 <div class="metrics">
   <p><strong>CPU Load Approximation:</strong> <span id="cpuLoad">0%</span></p>
   <p><strong>Allocated RAM:</strong> <span id="ramLoad">0 MB</span></p>
+  <p><strong>Current RAM Chunk Size:</strong> <span id="chunkSize">50 MB</span></p>
 </div>
 
 <script>
@@ -56,6 +57,7 @@
   const status = document.getElementById('status');
   const cpuLoadDisplay = document.getElementById('cpuLoad');
   const ramLoadDisplay = document.getElementById('ramLoad');
+  const chunkSizeDisplay = document.getElementById('chunkSize');
 
   let workers = [];
   let ramChunks = [];
@@ -64,26 +66,28 @@
 
   const cpuCount = navigator.hardwareConcurrency || 4;
 
-  function createWorker() {
-    const blob = new Blob([`
-      let busy = true;
-      let start = performance.now();
-      function busyLoop() {
-        while (performance.now() - start < 100) {}
-        start = performance.now();
-        postMessage('tick');
-        if (busy) setTimeout(busyLoop, 0);
+  // Worker code string (busy loop with small breaks)
+  const workerScript = `
+    let busy = true;
+    let start = performance.now();
+    function busyLoop() {
+      while (performance.now() - start < 100) {}
+      start = performance.now();
+      postMessage('tick');
+      if (busy) setTimeout(busyLoop, 0);
+    }
+    onmessage = (e) => {
+      if (e.data === 'start') {
+        busy = true;
+        busyLoop();
+      } else if (e.data === 'stop') {
+        busy = false;
       }
-      onmessage = (e) => {
-        if (e.data === 'start') {
-          busy = true;
-          busyLoop();
-        } else if (e.data === 'stop') {
-          busy = false;
-        }
-      };
-    `], { type: 'application/javascript' });
+    };
+  `;
 
+  function createWorker() {
+    const blob = new Blob([workerScript], { type: 'application/javascript' });
     return new Worker(URL.createObjectURL(blob));
   }
 
@@ -120,35 +124,60 @@
     cpuLoadDisplay.textContent = '0%';
   }
 
+  // Adaptive RAM allocation
+  let chunkSizeMB = 50;
+  const minChunkMB = 5;
+  const maxChunkMB = 200;
+  let allocationFailedCount = 0;
+  const failThreshold = 3; // Number of failures before shrinking chunk size
+
   function startRamLoad() {
     ramChunks = [];
-    const chunkSizeMB = 500;
-    const chunkSize = chunkSizeMB * 1024 * 1024 / 4; // 32-bit ints
+    allocateChunkAdaptive();
+  }
 
-    function allocateChunk() {
-      if (!isRunning) return;
-      try {
-        const arr = new Uint32Array(chunkSize);
-        // fill sparsely
-        for (let i = 0; i < arr.length; i += 10000) {
-          arr[i] = Math.random() * 0xffffffff;
-        }
-        ramChunks.push(arr);
-        ramLoadDisplay.textContent = (ramChunks.length * chunkSizeMB).toFixed(1) + ' MB';
-        // allocate next chunk after delay to avoid freeze
-        setTimeout(allocateChunk, 300);
-      } catch (e) {
-        ramLoadDisplay.textContent += ' (Allocation failed, retrying...)';
-        // retry allocation after longer delay on failure
-        setTimeout(allocateChunk, 1000);
+  function allocateChunkAdaptive() {
+    if (!isRunning) return;
+
+    const chunkSize = chunkSizeMB * 1024 * 1024 / 4; // Uint32 elements
+
+    try {
+      const arr = new Uint32Array(chunkSize);
+      // Sparse fill
+      for (let i = 0; i < arr.length; i += 10000) {
+        arr[i] = Math.random() * 0xffffffff;
       }
+      ramChunks.push(arr);
+      ramLoadDisplay.textContent = (ramChunks.length * chunkSizeMB).toFixed(1) + ' MB';
+      allocationFailedCount = 0;
+
+      // Gradually increase chunk size but max capped
+      if (chunkSizeMB < maxChunkMB) {
+        chunkSizeMB = Math.min(maxChunkMB, chunkSizeMB + 5);
+        chunkSizeDisplay.textContent = chunkSizeMB + ' MB';
+      }
+      // Allocate next chunk after small delay
+      setTimeout(allocateChunkAdaptive, 300);
+    } catch (e) {
+      allocationFailedCount++;
+      ramLoadDisplay.textContent = (ramChunks.length * chunkSizeMB).toFixed(1) + 
+        ' MB (Allocation failed #' + allocationFailedCount + ')';
+      // On repeated failures reduce chunk size if possible
+      if (allocationFailedCount >= failThreshold && chunkSizeMB > minChunkMB) {
+        chunkSizeMB = Math.max(minChunkMB, chunkSizeMB - 10);
+        chunkSizeDisplay.textContent = chunkSizeMB + ' MB';
+        allocationFailedCount = 0;
+      }
+      // Retry after longer delay
+      setTimeout(allocateChunkAdaptive, 1500);
     }
-    allocateChunk();
   }
 
   function stopRamLoad() {
     ramChunks = [];
     ramLoadDisplay.textContent = '0 MB';
+    chunkSizeMB = 50;
+    chunkSizeDisplay.textContent = chunkSizeMB + ' MB';
   }
 
   toggleBtn.onclick = () => {
