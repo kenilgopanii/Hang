@@ -1,105 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>🔥 Full System Stress Test</title>
-  <style>
-    body {
-      margin: 0;
-      background: #111;
-      color: #0af;
-      font-family: Arial, sans-serif;
-      text-align: center;
-    }
-
-    h2 {
-      margin: 20px;
-    }
-
-    #container {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      padding: 10px;
-    }
-
-    .box {
-      width: 10px;
-      height: 10px;
-      margin: 1px;
-      background: #0af;
-      animation: pulse 0.4s infinite alternate;
-      filter: blur(0.5px) brightness(1.5);
-    }
-
-    @keyframes pulse {
-      from { transform: scale(1); }
-      to { transform: scale(1.5); background-color: #00ffff; }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Reliable CPU & RAM Stress Test</title>
+<style>
+  body {
+    background: #121212;
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    text-align: center;
+    padding: 2rem;
+  }
+  h1 {
+    color: #ff5555;
+  }
+  button {
+    background: #ff5555;
+    border: none;
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    margin: 1rem auto;
+  }
+  button:hover {
+    background: #ff2222;
+  }
+  #status {
+    margin-top: 1rem;
+    font-weight: bold;
+  }
+  .metrics {
+    margin-top: 2rem;
+    font-size: 1.1rem;
+  }
+</style>
 </head>
 <body>
-  <h2>🔥 Full Stress Test: CPU + GPU + RAM + Disk</h2>
-  <p>Rendering boxes, calculating math, allocating memory, and writing to disk...</p>
-  <div id="container"></div>
 
-  <script>
-    const container = document.getElementById("container");
-    let totalBoxes = 0;
-    const maxBoxes = 500000;
-    const boxesPerBatch = 5000;
+<h1>Reliable CPU & RAM Stress Test</h1>
+<p><strong>Warning:</strong> This test stresses your CPU and RAM gradually and tries to keep running without crashing.</p>
+<button id="toggleBtn">Start Stress Test</button>
 
-    // GPU Stress: Animated DOM elements
-    function renderBoxes() {
-      for (let i = 0; i < boxesPerBatch; i++) {
-        const box = document.createElement("div");
-        box.className = "box";
-        container.appendChild(box);
-        totalBoxes++;
+<div id="status">Status: Idle</div>
+
+<div class="metrics">
+  <p><strong>CPU Load Approximation:</strong> <span id="cpuLoad">0%</span></p>
+  <p><strong>Allocated RAM:</strong> <span id="ramLoad">0 MB</span></p>
+</div>
+
+<script>
+  const toggleBtn = document.getElementById('toggleBtn');
+  const status = document.getElementById('status');
+  const cpuLoadDisplay = document.getElementById('cpuLoad');
+  const ramLoadDisplay = document.getElementById('ramLoad');
+
+  let workers = [];
+  let ramChunks = [];
+  let isRunning = false;
+  let cpuLoad = 0;
+
+  const cpuCount = navigator.hardwareConcurrency || 4;
+
+  function createWorker() {
+    const blob = new Blob([`
+      let busy = true;
+      let start = performance.now();
+      function busyLoop() {
+        while (performance.now() - start < 100) {}
+        start = performance.now();
+        postMessage('tick');
+        if (busy) setTimeout(busyLoop, 0);
       }
-      if (totalBoxes < maxBoxes) {
-        requestAnimationFrame(renderBoxes);
-      }
-    }
-
-    // CPU Stress: Constant heavy math
-    function cpuStress() {
-      setInterval(() => {
-        for (let i = 0; i < 5e6; i++) {
-          Math.sqrt(Math.random() * i);
+      onmessage = (e) => {
+        if (e.data === 'start') {
+          busy = true;
+          busyLoop();
+        } else if (e.data === 'stop') {
+          busy = false;
         }
-      }, 20);
+      };
+    `], { type: 'application/javascript' });
+
+    return new Worker(URL.createObjectURL(blob));
+  }
+
+  function startCpuLoad() {
+    workers = [];
+    let ticksReceived = 0;
+
+    for (let i = 0; i < cpuCount; i++) {
+      const worker = createWorker();
+      worker.onmessage = () => {
+        ticksReceived++;
+      };
+      worker.postMessage('start');
+      workers.push(worker);
     }
 
-    // RAM Stress: Allocate growing arrays
-    const memoryHog = [];
-    function ramStress() {
-      setInterval(() => {
-        const arr = new Array(50000).fill(Math.random());
-        memoryHog.push(arr);
-        if (memoryHog.length > 200) memoryHog.shift(); // Keep growing slowly
-      }, 50);
-    }
+    const cpuInterval = setInterval(() => {
+      const maxTicks = cpuCount * 10; // ~10 ticks/sec per worker
+      const load = Math.min(100, (ticksReceived / maxTicks) * 100);
+      cpuLoad = load.toFixed(1);
+      cpuLoadDisplay.textContent = cpuLoad + '%';
+      ticksReceived = 0;
 
-    // Disk Stress: Write large strings to localStorage
-    function diskStress() {
-      let bigData = "x".repeat(50000); // 50KB
-      let i = 0;
+      if (!isRunning) clearInterval(cpuInterval);
+    }, 1000);
+  }
+
+  function stopCpuLoad() {
+    workers.forEach(w => {
+      w.postMessage('stop');
+      w.terminate();
+    });
+    workers = [];
+    cpuLoadDisplay.textContent = '0%';
+  }
+
+  function startRamLoad() {
+    ramChunks = [];
+    const chunkSizeMB = 50;
+    const chunkSize = chunkSizeMB * 1024 * 1024 / 4; // 32-bit ints
+
+    function allocateChunk() {
+      if (!isRunning) return;
       try {
-        setInterval(() => {
-          localStorage.setItem("stress_" + i, bigData);
-          i++;
-        }, 100);
+        const arr = new Uint32Array(chunkSize);
+        // fill sparsely
+        for (let i = 0; i < arr.length; i += 10000) {
+          arr[i] = Math.random() * 0xffffffff;
+        }
+        ramChunks.push(arr);
+        ramLoadDisplay.textContent = (ramChunks.length * chunkSizeMB).toFixed(1) + ' MB';
+        // allocate next chunk after delay to avoid freeze
+        setTimeout(allocateChunk, 300);
       } catch (e) {
-        console.warn("Disk quota likely reached:", e.message);
+        ramLoadDisplay.textContent += ' (Allocation failed, retrying...)';
+        // retry allocation after longer delay on failure
+        setTimeout(allocateChunk, 1000);
       }
     }
+    allocateChunk();
+  }
 
-    // Run all stressors
-    renderBoxes();
-    setTimeout(cpuStress, 1000);
-    setTimeout(ramStress, 1500);
-    setTimeout(diskStress, 2000);
-  </script>
+  function stopRamLoad() {
+    ramChunks = [];
+    ramLoadDisplay.textContent = '0 MB';
+  }
+
+  toggleBtn.onclick = () => {
+    if (!isRunning) {
+      isRunning = true;
+      toggleBtn.textContent = 'Stop Stress Test';
+      status.textContent = 'Status: Running stress test...';
+
+      startCpuLoad();
+      startRamLoad();
+    } else {
+      isRunning = false;
+      toggleBtn.textContent = 'Start Stress Test';
+      status.textContent = 'Status: Stopped.';
+      stopCpuLoad();
+      stopRamLoad();
+    }
+  };
+</script>
+
 </body>
 </html>
